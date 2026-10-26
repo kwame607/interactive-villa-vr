@@ -26,10 +26,16 @@
       border-radius: 50%; background: #ffffffdf; box-shadow: 0 2px 10px #0008;
       pointer-events: none;
     }
+    /* Dedicated touch target: the full-screen parent ignores pointer events. */
+    #look-zone {
+      position: absolute; left: 50%; right: 0; top: 0; bottom: 0;
+      pointer-events: auto; touch-action: none;
+    }
     #look-hint {
       position: absolute; right: 12px; bottom: 24px; color: white;
       background: #10182899; border-radius: 10px; padding: 10px 12px;
       font-size: 12px; max-width: 130px; text-align: center;
+      pointer-events: none;
     }
     #loading-note {
       position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
@@ -119,9 +125,10 @@
       buildUI: function () {
         this.ui = document.createElement('div');
         this.ui.id = 'mobile-controls';
-        this.ui.innerHTML = '<div id="joystick-zone" aria-label="Movement joystick"><div id="joystick-knob"></div></div><div id="look-hint">Swipe the right side to look around</div>';
+        this.ui.innerHTML = '<div id="joystick-zone" aria-label="Movement joystick"><div id="joystick-knob"></div></div><div id="look-zone" aria-label="Swipe here to look around"></div><div id="look-hint">Swipe the right side to look around</div>';
         document.body.appendChild(this.ui);
         this.zone = this.ui.querySelector('#joystick-zone');
+        this.lookZone = this.ui.querySelector('#look-zone');
         this.knob = this.ui.querySelector('#joystick-knob');
 
         this.zone.addEventListener('pointerdown', (e) => {
@@ -151,13 +158,15 @@
           this.knob.style.transform = 'translate(0px, 0px)';
         });
 
-        this.ui.addEventListener('pointerdown', (e) => {
-          if (this.zone.contains(e.target)) return;
+        // Use the dedicated right-side surface so swipes are actually received.
+        this.lookZone.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
           this.lookId = e.pointerId;
           this.lastX = e.clientX;
           this.lastY = e.clientY;
+          if (this.lookZone.setPointerCapture) this.lookZone.setPointerCapture(e.pointerId);
         });
-        this.ui.addEventListener('pointermove', (e) => {
+        this.lookZone.addEventListener('pointermove', (e) => {
           if (e.pointerId !== this.lookId || !this.cameraEl) return;
           e.preventDefault();
           const dx = e.clientX - this.lastX;
@@ -166,15 +175,16 @@
           this.lastY = e.clientY;
           this.yaw -= dx * 0.004;
           this.pitch -= dy * 0.004;
-          this.pitch = Math.max(-1.15, Math.min(1.15, this.pitch));
+          this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch));
           this.cameraEl.object3D.rotation.order = 'YXZ';
           this.cameraEl.object3D.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
         }, { passive: false });
         const stopLook = (e) => {
           if (e.pointerId === this.lookId) this.lookId = null;
         };
-        this.ui.addEventListener('pointerup', stopLook);
-        this.ui.addEventListener('pointercancel', stopLook);
+        this.lookZone.addEventListener('pointerup', stopLook);
+        this.lookZone.addEventListener('pointercancel', stopLook);
+        this.lookZone.addEventListener('lostpointercapture', stopLook);
       },
       updateJoystick: function (e) {
         const r = this.zone.getBoundingClientRect();
